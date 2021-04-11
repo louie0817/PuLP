@@ -1,0 +1,12 @@
+\* Example_Problem *\
+Minimize
+OBJ: 48 NUM_A + 24 NUM_B
+Subject To
+_C1: 200 NUM_A + 120 NUM_B >= 1800
+Bounds
+0 <= NUM_A <= 8
+0 <= NUM_B <= 10
+Generals
+NUM_A
+NUM_B
+End
