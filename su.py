@@ -1,9 +1,31 @@
 #!/usr/bin/python3.6
 # Import PuLP modeler functions
 from pulp import *
+import re
 import sys
 import pprint
 from get_km2 import *
+
+import argparse
+
+parser = argparse.ArgumentParser(description='Process some options.')
+parser.add_argument('--magic', dest='magic', action='store_true')
+parser.add_argument('--diagtop', dest='diagtop', action='store_true')
+parser.add_argument('--diagbot', dest='diagbot', action='store_true')
+parser.add_argument('--km_diff', dest='km_diff', action='store_true')
+parser.add_argument('--km_parity', dest='km_parity', action='store_true')
+parser.add_argument('--stop', dest='stop', action='store_true')
+parser.add_argument('--rxcx', dest='rxcx', action='store_true')
+parser.add_argument('--l2lr', dest='l2lr', action='append', nargs=2)
+parser.add_argument('--t2ll', dest='t2ll', action='append', nargs=2)
+parser.add_argument('--b2tr', dest='b2tr', action='append', nargs=2)
+parser.add_argument('--r2tl', dest='r2tl', action='append', nargs=2)
+parser.add_argument('input_file', nargs=1)
+args = parser.parse_args()
+
+
+#pprint.pprint(args)
+#sys.exit(33)
 
 # All rows, columns and values within a Sudoku take values from 1 to 9
 VALS = ROWS = COLS = range(1, 10)
@@ -14,7 +36,7 @@ Boxes = [
     for i in range(3) for j in range(3)
 ]
 
-#pprint.pprint(Boxes)
+pprint.pprint(Boxes)
 #for i in range(0,9):
 #    pprint.pprint(Boxes[i])
 #sys.exit(33)
@@ -24,6 +46,7 @@ prob = LpProblem("Sudoku_Problem")
 
 # The decision variables are created
 choices = LpVariable.dicts("Choice", (VALS, ROWS, COLS), cat='Binary')
+
 
 # We do not define an objective function since none is needed
 
@@ -47,18 +70,93 @@ for v in VALS:
 
 #fields = [line.strip() for line in fh.readlines()]
 
-data = []
-fh = open(sys.argv[1], "r")
+
+#data = []
+#fh = open(args.input_file[0], "r")
+#for line in fh.readlines():
+#    if line.startswith("#"):
+#       continue
+#    tmp = line.strip().split(",")
+#    if len(tmp) == 10:
+#        tmp2 = [ int(tmp[x].strip()) for x in range(9)]
+#        data.append(tmp2)
+
+    # do stuff
+
+cages = dict()
+arrows = dict()
+data  = []
+#cage_pat=re.compile('^(?P<lou>[A-Z])(?P<var>\d{1,2})')
+#arrow_pat=re.compile('^(??<loua>[a-z])(?P<vara>\d{0,1})')
+
+cage_pat=re.compile('^([A-Z])(\d{1,2})')
+arrow_pat=re.compile('^([a-z])(T{0,1})')
+
+fh = open(args.input_file[0], "r")
+lineno=0
 for line in fh.readlines():
+    if line.startswith("#"):
+       continue
     tmp = line.strip().split(",")
     if len(tmp) == 10:
-        tmp2 = [ int(tmp[x].strip()) for x in range(9)]
+        lineno=lineno+1
+        tmp2=[]
+        for x in range(9):
+            cell=tmp[x].strip()
+            print("working on ", cell)
+            cagefind =cage_pat.match(cell)
+            arrowfind=arrow_pat.match(cell)
+            if cagefind is not None:
+                cage=cagefind.group(1)
+                total=cagefind.group(2)
+                if cage not in cages:
+                    cages[cage]=dict()
+                    cages[cage]['val']=total
+                    cages[cage]['list']=[]
+                cages[cage]['list'].append( (lineno,x+1) )
+                tmp2.append(0)
+            elif arrowfind is not None:
+                arrow=arrowfind.group(1)
+                total=arrowfind.group(2)
+                if arrow not in arrows:
+                    arrows[arrow]=dict()
+                    arrows[arrow]['list']=[]
+                if total == 'T':
+                    arrows[arrow]['totalcell']=(lineno,x+1)
+                else:
+                    arrows[arrow]['list'].append( (lineno,x+1) )
+                tmp2.append(0)
+            else:
+                tmp2.append(int(cell))
         data.append(tmp2)
 
 fh.close()
-#pprint.pprint(data)
-
+pprint.pprint(data)
+pprint.pprint(cages)
+pprint.pprint(arrows)
 #sys.exit(33)
+
+# cages dict looks like this
+#{'A': {'list': [(1, 1), (1, 2), (1, 3), (2, 3)], 'val': '25'},
+#'B': {'list': [(9, 7), (9, 8), (9, 9)], 'val': '13'}}
+
+if bool(cages):
+    for cage in cages:
+        total=int(cages[cage]['val'])
+        prob += lpSum( [ choices[v][r][c] * v for v in VALS for (r,c) in cages[cage]['list'] ]  )  == total, "cage_" + cage
+#prob += lpSum( [ choices[v][r][c] for (r,c) in cages[cage]['list'] ] ) == cages[cage]['val'], "cage_" + cage 
+
+
+{'a': {'list': [(5, 2), (5, 3)], 'totalcell': (5, 1)}}
+if bool(arrows):
+    for arrow in arrows:
+        (i,j)=arrows[arrow]['totalcell']
+        print(type(i))
+        print(type(j))
+        prob += (lpSum( [ choices[v][r][c] * v for v in VALS for (r,c) in arrows[arrow]['list'] ]  ) - lpSum( [ choices[v][i][j] * v for v in VALS ] )) == 0, "arrow_" + arrow
+#prob += lpSum( [ choices[v][r][c] for (r,c) in cages[cage]['list'] ] ) == cages[cage]['val'], "cage_" + cage 
+
+
 # pre-load clues with constraints , with warmstart
 for r in range(9):
     for c in range(9):
@@ -99,25 +197,30 @@ for r in range(9):
 #           print(r,c)
 ##sys.exit(33)
 
-# more constraints
-# need to add rXcX cannot contain same digit
-#for v in VALS:
-#    for i in range(0,9):
-#        prob += lpSum( [ choices[v][r][c] for (r,c) in [ Boxes[j][i] ] ] for j in range(0,9) ) == 1, "rxcx_" + str(v) + str(i)
+## more constraints
+## need to add rXcX cannot contain same digit
+if args.rxcx:
+    for v in VALS:
+        for i in range(0,9):
+            prob += lpSum( [ choices[v][r][c] for (r,c) in [ Boxes[j][i] ] ] for j in range(0,9) ) == 1, "rxcx_" + str(v) + str(i)
 
 #
 #main diagonals corner to corner
-for v in VALS:
-    # main diag tl2br
-    prob += lpSum( [choices[v][r][r] for r in range(9,0,-1) ]) == 1, "tl2br" + str(v)
-    # main diag bl2tr
-    prob += lpSum( [choices[v][r][10-r] for r in range(9,0,-1) ]) == 1, "bl2tr" + str(v)
+if args.diagtop:
+    for v in VALS:
+        # main diag tl2br
+        prob += lpSum( [choices[v][r][r] for r in range(9,0,-1) ]) == 1, "tl2br" + str(v)
+
+if args.diagbot:
+    for v in VALS:
+        # main diag bl2tr
+        prob += lpSum( [choices[v][r][10-r] for r in range(9,0,-1) ]) == 1, "bl2tr" + str(v)
 
 # call diagonal sum constraints per designer direction(start,expected sum value)
-def f2lr(val,total):
-    # left? to lower right (what is f in f2lr
+def l2lr(val,total):
+    # left to lower right
     global prob
-    prob += lpSum( [ choices[v][r][c] * v for v in VALS for (r,c) in zip( range(val,10) , range(1,10-val+1) ) ]) == total, "f2lr" + str(val) + str(total)
+    prob += lpSum( [ choices[v][r][c] * v for v in VALS for (r,c) in zip( range(val,10) , range(1,10-val+1) ) ]) == total, "l2lr" + str(val) + str(total)
 
 
 def t2ll(val,total):
@@ -148,13 +251,58 @@ def r2tl(val,total):
 #    prob += lpSum( [ v * choices[v][x][9] for v in VALS  ]) >= lpSum( [ v * choices[v][x][8] for v in VALS  ])  , "right_" + str(x)
 
 #magic square
+def magic_square(box):
+
+#[[(1, 1), (1, 2), (1, 3), (2, 1), (2, 2), (2, 3), (3, 1), (3, 2), (3, 3)],
+
+    b=Boxes[box]
+
+    global prob
+
+    # two diagonals
+    prob += lpSum(  [ v * choices[v][r][c] for v in VALS for (r,c) in [ b[0], b[4], b[8] ] ]) == 15, "magic_tl2br_diag" + str(box)
+    prob += lpSum(  [ v * choices[v][r][c] for v in VALS for (r,c) in [ b[6], b[4], b[2] ] ]) == 15, "magic_bl2tr_diag" + str(box)
+
+    # rows
+    prob += lpSum(  [ v * choices[v][r][c] for v in VALS for (r,c) in [ b[0], b[1], b[2] ] ]) == 15, "magic_box_row" + str(box) + str(1)
+    prob += lpSum(  [ v * choices[v][r][c] for v in VALS for (r,c) in [ b[3], b[4], b[5] ] ]) == 15, "magic_box_row" + str(box) + str(2)
+    prob += lpSum(  [ v * choices[v][r][c] for v in VALS for (r,c) in [ b[6], b[7], b[8] ] ]) == 15, "magic_box_row" + str(box) + str(3)
+
+    # cols
+    prob += lpSum(  [ v * choices[v][r][c] for v in VALS for (r,c) in [ b[0], b[3], b[6] ] ]) == 15, "magic_box_col" + str(box) + str(1)
+    prob += lpSum(  [ v * choices[v][r][c] for v in VALS for (r,c) in [ b[1], b[4], b[7] ] ]) == 15, "magic_box_col" + str(box) + str(2)
+    prob += lpSum(  [ v * choices[v][r][c] for v in VALS for (r,c) in [ b[2], b[5], b[8] ] ]) == 15, "magic_box_col" + str(box) + str(3)
+
+#magic_square(0)
+#magic_square(1)
+#magic_square(2)
+
+#magic_square(3)
+#magic_square(4)
+#magic_square(5)
+
+#magic_square(6)
+#magic_square(7)
+#magic_square(8)
+
+
+#magic square
 # two diagonals
-prob += lpSum(  [ v * choices[v][x][x] for v in VALS for x in range(4,7) ] ) == 15, "magic_tl2br_diag"
-prob += lpSum(  [ v * choices[v][r][c] for v in VALS for (r,c) in zip(range(6,3,-1),range(4,7)) ] ) == 15, "magic_bl2tr_diag"
-# rows and columns
-for x in range(4,7):
-    prob += lpSum(  [ v * choices[v][x][c] for v in VALS for c in range(4,7) ] ) == 15, "magic_row_" + str(x)
-    prob += lpSum(  [ v * choices[v][r][x] for v in VALS for r in range(4,7) ] ) == 15, "magic_col_" + str(x)
+#prob += lpSum(  [ v * choices[v][x][x] for v in VALS for x in range(4,7) ] ) == 15, "magic_tl2br_diag"
+#prob += lpSum(  [ v * choices[v][r][c] for v in VALS for (r,c) in zip(range(6,3,-1),range(4,7)) ] ) == 15, "magic_bl2tr_diag"
+## rows and columns
+#for x in range(4,7):
+#    prob += lpSum(  [ v * choices[v][x][c] for v in VALS for c in range(4,7) ] ) == 15, "magic_row_" + str(x)
+#    prob += lpSum(  [ v * choices[v][r][x] for v in VALS for r in range(4,7) ] ) == 15, "magic_col_" + str(x)
+
+
+
+def lessthan(r1,c1,r2,c2):
+    global prob
+    prob += lpSum(  [ v * choices[v][r1][c1] for v in VALS ] ) >= lpSum(  [ v * choices[v][r2][c2] for v in VALS ] ) -1 , "lessthan_" + str(r1) + str(c1) + str(r2) + str(c2)
+
+#lessthan(2,8,1,8)
+
 
 
 def look_3_in(val,t=None,b=None,l=None,r=None):
@@ -198,30 +346,53 @@ def look_3_in(val,t=None,b=None,l=None,r=None):
 #look_3_in(6,r=6)
 #look_3_in(3,r=8)
 
+diagfuncs=[
+"l2lr",
+"t2ll",
+"b2tr",
+"r2tl",
+]
 
-# call diagonal sum constraints per designer direction(start,expected sum value)
-#f2lr(5,42)
-#f2lr(7,12)
-#f2lr(8,15)
-#t2ll(6,17)
-#b2tr(4,41)
-#b2tr(7,8)
-#r2tl(3,20)
-#r2tl(7,22)
+for f in diagfuncs:
+    me=getattr(args,f)
+    if me:
+        for x in me:
+            eval(f)(int(x[0]),int(x[1]))
 
+#mymod = dict([ (0 , 0), (1 , 1), (2 , 0), (3 , 1), (4 , 0), (5 , 1), (6 , 0), (7 , 1), (8 , 0), (9 , 1), ])
+mymod = dict([ (0 , 0), (1 , 1), (2 , 2), (3 , 1), (4 , 2), (5 , 1), (6 , 2), (7 , 1), (8 , 2), (9 , 1), ])
 km_seen={}
 km_moves={}
 km_moves=get_km()
+#pprint.pprint(km_moves)
+#sys.exit(33)
 
-# setup knight moves, cache reciprocal cells
-for v in VALS:
-    for r in ROWS:
-        for c in COLS:
-            for (i,j) in km_moves[(r,c)]:
-                #print("doing %d,%d,%d,%d,%d\n" % (v,r,c,i,j) )
-                if (v,r,c,i,j) not in km_seen:
-                    prob += lpSum( [ choices[v][i][j] ] + [ choices[v][r][c] ] ) <= 1 , 'km_v%1d_r%1d_c%1d_i%1d_j%1d'%( v, r, c, i, j)
-                    km_seen[(v,i,j,r,c)]=1
+## setup knight moves, cache reciprocal cells
+def parity(r,c):
+    global prob
+    for (i,j) in km_moves[(r,c)]:
+        prob += lpSum([ mymod[v] * choices[v][i][j] for v in VALS ] + [ mymod[v] * choices[v][r][c] for v in VALS ]) == 3 , 'kmp_r%1d_c%1d_i%1d_j%1d'%( r, c, i, j)
+
+
+if args.km_parity:
+    for r in range(4,7):
+        for c in range(4,7):
+            parity(r,c)
+    #parity(2,2)
+    #parity(2,8)
+    #parity(8,8)
+    #parity(8,2)
+
+## setup knight moves, cache reciprocal cells
+if args.km_diff:
+    for v in VALS:
+        for r in ROWS:
+            for c in COLS:
+                for (i,j) in km_moves[(r,c)]:
+                    #print("doing %d,%d,%d,%d,%d\n" % (v,r,c,i,j) )
+                    if (v,r,c,i,j) not in km_seen:
+                        prob += lpSum( [ choices[v][i][j] ] + [ choices[v][r][c] ] ) <= 1 , 'kmd_v%1d_r%1d_c%1d_i%1d_j%1d'%( v, r, c, i, j)
+                        km_seen[(v,i,j,r,c)]=1
 
 # The problem data is written to an .lp file
 prob.writeLP("Sudoku.lp")
@@ -269,7 +440,8 @@ while tries <= 2:
         prob += lpSum([choices[v][r][c] for v in VALS for r in ROWS for c in COLS
                        if value(choices[v][r][c]) == 1]) <= 80, "no dups_" + str(tries)
     # If a new optimal solution cannot be found, we end the program
-        break
+        if args.stop:
+            break
     else:
         break
 sudokuout.close()
