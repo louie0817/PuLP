@@ -157,7 +157,7 @@ for line in fh.readlines():
 fh.close()
 #pprint.pprint(data)
 #pprint.pprint(cages)
-pprint.pprint(arrows)
+#pprint.pprint(arrows)
 #sys.exit(33)
 
 # cages dict looks like this
@@ -168,9 +168,11 @@ if bool(cages):
     for cage in cages:
         total=int(cages[cage]['val'])
         prob += lpSum( [ choices[v][r][c] * v for v in VALS for (r,c) in cages[cage]['list'] ]  )  == total, "cage_" + cage
-#prob += lpSum( [ choices[v][r][c] for (r,c) in cages[cage]['list'] ] ) == cages[cage]['val'], "cage_" + cage 
-
-
+        # all cells in cages must be unique
+        for v in VALS:
+            prob += lpSum([choices[v][r][c] for (r, c) in cages[cage]['list']] ) <= 1, "cages_" + cage + str(v)
+    
+    
 {'a': {'list': {1: [(4, 4)], 2: [(4, 2), (5, 2), (6, 2)]}, 'totalcell': (3, 3)},
  'b': {'list': {1: [(8, 4), (8, 5), (8, 6)], 2: [(6, 4)]}, 'totalcell': (7, 3)},
  'c': {'list': {1: [(4, 8), (5, 8), (6, 8)], 2: [(6, 6)]}, 'totalcell': (7, 7)},
