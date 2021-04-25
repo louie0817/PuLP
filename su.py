@@ -15,6 +15,7 @@ parser.add_argument('--diagbot', dest='diagbot', action='store_true')
 parser.add_argument('--km_diff', dest='km_diff', action='store_true')
 parser.add_argument('--km_parity', dest='km_parity', action='store_true')
 parser.add_argument('--stop', dest='stop', action='store_true')
+parser.add_argument('--tries', dest='tries', nargs=1, default=1 )
 parser.add_argument('--rxcx', dest='rxcx', action='store_true')
 parser.add_argument('--l2lr', dest='l2lr', action='append', nargs=2)
 parser.add_argument('--t2ll', dest='t2ll', action='append', nargs=2)
@@ -22,6 +23,15 @@ parser.add_argument('--b2tr', dest='b2tr', action='append', nargs=2)
 parser.add_argument('--r2tl', dest='r2tl', action='append', nargs=2)
 parser.add_argument('input_file', nargs=1)
 args = parser.parse_args()
+
+
+if args.stop:
+    TRIES=1
+else:
+    TRIES=3
+
+if args.tries:
+    TRIES=args.tries
 
 
 #pprint.pprint(args)
@@ -90,7 +100,7 @@ data  = []
 #arrow_pat=re.compile('^(??<loua>[a-z])(?P<vara>\d{0,1})')
 
 cage_pat=re.compile('^([A-Z])(\d{1,2})')
-arrow_pat=re.compile('^([a-z])(T{0,1})')
+arrow_pat=re.compile('^([a-z])(T|\d)')
 
 fh = open(args.input_file[0], "r")
 lineno=0
@@ -106,6 +116,7 @@ for line in fh.readlines():
             print("working on ", cell)
             cagefind =cage_pat.match(cell)
             arrowfind=arrow_pat.match(cell)
+            pprint.pprint(arrowfind)
             if cagefind is not None:
                 cage=cagefind.group(1)
                 total=cagefind.group(2)
@@ -118,21 +129,34 @@ for line in fh.readlines():
             elif arrowfind is not None:
                 arrow=arrowfind.group(1)
                 total=arrowfind.group(2)
+                try:
+                    itot=int(total)
+                except:
+                    print("caught Exception")
+                    itot=0
+ 
                 if arrow not in arrows:
                     arrows[arrow]=dict()
-                    arrows[arrow]['list']=[]
+                    arrows[arrow]['list']=dict()
+                    if itot in range(1,10):
+                        arrows[arrow]['list'][itot]=[]
                 if total == 'T':
                     arrows[arrow]['totalcell']=(lineno,x+1)
-                else:
-                    arrows[arrow]['list'].append( (lineno,x+1) )
+                if itot in range(1,10) :
+                    print(itot)
+                    if itot not in arrows[arrow]['list']:
+                        arrows[arrow]['list'][itot]=[]
+                    arrows[arrow]['list'][itot].append( (lineno,x+1) )
                 tmp2.append(0)
             else:
                 tmp2.append(int(cell))
         data.append(tmp2)
 
+# a1 , a1 , a1 ,   aT , a2 , 0 ,   0 , 0 , 0 ,
+
 fh.close()
-pprint.pprint(data)
-pprint.pprint(cages)
+#pprint.pprint(data)
+#pprint.pprint(cages)
 pprint.pprint(arrows)
 #sys.exit(33)
 
@@ -147,14 +171,15 @@ if bool(cages):
 #prob += lpSum( [ choices[v][r][c] for (r,c) in cages[cage]['list'] ] ) == cages[cage]['val'], "cage_" + cage 
 
 
-{'a': {'list': [(5, 2), (5, 3)], 'totalcell': (5, 1)}}
+{'a': {'list': {1: [(4, 4)], 2: [(4, 2), (5, 2), (6, 2)]}, 'totalcell': (3, 3)},
+ 'b': {'list': {1: [(8, 4), (8, 5), (8, 6)], 2: [(6, 4)]}, 'totalcell': (7, 3)},
+ 'c': {'list': {1: [(4, 8), (5, 8), (6, 8)], 2: [(6, 6)]}, 'totalcell': (7, 7)},
+ 'd': {'list': {1: [(2, 4), (2, 5), (2, 6)], 2: [(4, 6)]}, 'totalcell': (3, 7)}}
 if bool(arrows):
     for arrow in arrows:
         (i,j)=arrows[arrow]['totalcell']
-        print(type(i))
-        print(type(j))
-        prob += (lpSum( [ choices[v][r][c] * v for v in VALS for (r,c) in arrows[arrow]['list'] ]  ) - lpSum( [ choices[v][i][j] * v for v in VALS ] )) == 0, "arrow_" + arrow
-#prob += lpSum( [ choices[v][r][c] for (r,c) in cages[cage]['list'] ] ) == cages[cage]['val'], "cage_" + cage 
+        for path in arrows[arrow]['list']:
+            prob += (lpSum( [ choices[v][r][c] * v for v in VALS for (r,c) in arrows[arrow]['list'][path] ]  ) - lpSum( [ choices[v][i][j] * v for v in VALS ] )) == 0, "arrow_" + arrow + "_" + str(path)
 
 
 # pre-load clues with constraints , with warmstart
@@ -410,7 +435,7 @@ solver=PULP_CBC_CMD(msg=True,warmStart=True)
 
 tries=0
 count=0
-while tries <= 2:
+while tries < int(TRIES):
     tries+=1
     prob.writeLP("Sudoku.lp")
     prob.solve(solver)
