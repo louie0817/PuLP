@@ -46,7 +46,7 @@ Boxes = [
     for i in range(3) for j in range(3)
 ]
 
-pprint.pprint(Boxes)
+#pprint.pprint(Boxes)
 #for i in range(0,9):
 #    pprint.pprint(Boxes[i])
 #sys.exit(33)
@@ -60,22 +60,6 @@ choices = LpVariable.dicts("Choice", (VALS, ROWS, COLS), cat='Binary')
 
 # We do not define an objective function since none is needed
 
-# A constraint ensuring that only one value can be in each square is created
-for r in ROWS:
-    for c in COLS:
-        prob += lpSum([choices[v][r][c] for v in VALS]) == 1
-
-# standard sudoku
-# The row, column and box constraints are added for each value
-for v in VALS:
-    for r in ROWS:
-        prob += lpSum([choices[v][r][c] for c in COLS]) == 1
-
-    for c in COLS:
-        prob += lpSum([choices[v][r][c] for r in ROWS]) == 1
-
-    for b in Boxes:
-        prob += lpSum([choices[v][r][c] for (r, c) in b]) == 1, "boxes_" + str(v) + str(b)
 
 
 #fields = [line.strip() for line in fh.readlines()]
@@ -113,10 +97,10 @@ for line in fh.readlines():
         tmp2=[]
         for x in range(9):
             cell=tmp[x].strip()
-            print("working on ", cell)
+            #print("working on ", cell)
             cagefind =cage_pat.match(cell)
             arrowfind=arrow_pat.match(cell)
-            pprint.pprint(arrowfind)
+            #pprint.pprint(arrowfind)
             if cagefind is not None:
                 cage=cagefind.group(1)
                 total=cagefind.group(2)
@@ -124,16 +108,18 @@ for line in fh.readlines():
                     cages[cage]=dict()
                     cages[cage]['val']=total
                     cages[cage]['list']=[]
+                if 'val' in cages[cage] and cages[cage]['val'] != total:
+                    print("ERROR, duplicate cage ", cage)
+                    sys.exit(1)
                 cages[cage]['list'].append( (lineno,x+1) )
                 tmp2.append(0)
             elif arrowfind is not None:
                 arrow=arrowfind.group(1)
                 total=arrowfind.group(2)
-                try:
-                    itot=int(total)
-                except:
-                    print("caught Exception")
+                if total == 'T':
                     itot=0
+                else:
+                    itot=int(total)
  
                 if arrow not in arrows:
                     arrows[arrow]=dict()
@@ -143,7 +129,7 @@ for line in fh.readlines():
                 if total == 'T':
                     arrows[arrow]['totalcell']=(lineno,x+1)
                 if itot in range(1,10) :
-                    print(itot)
+                    #print(itot)
                     if itot not in arrows[arrow]['list']:
                         arrows[arrow]['list'][itot]=[]
                     arrows[arrow]['list'][itot].append( (lineno,x+1) )
@@ -151,8 +137,6 @@ for line in fh.readlines():
             else:
                 tmp2.append(int(cell))
         data.append(tmp2)
-
-# a1 , a1 , a1 ,   aT , a2 , 0 ,   0 , 0 , 0 ,
 
 fh.close()
 #pprint.pprint(data)
@@ -172,16 +156,12 @@ if bool(cages):
         for v in VALS:
             prob += lpSum([choices[v][r][c] for (r, c) in cages[cage]['list']] ) <= 1, "cages_" + cage + str(v)
     
-    
-{'a': {'list': {1: [(4, 4)], 2: [(4, 2), (5, 2), (6, 2)]}, 'totalcell': (3, 3)},
- 'b': {'list': {1: [(8, 4), (8, 5), (8, 6)], 2: [(6, 4)]}, 'totalcell': (7, 3)},
- 'c': {'list': {1: [(4, 8), (5, 8), (6, 8)], 2: [(6, 6)]}, 'totalcell': (7, 7)},
- 'd': {'list': {1: [(2, 4), (2, 5), (2, 6)], 2: [(4, 6)]}, 'totalcell': (3, 7)}}
 if bool(arrows):
     for arrow in arrows:
         (i,j)=arrows[arrow]['totalcell']
         for path in arrows[arrow]['list']:
-            prob += (lpSum( [ choices[v][r][c] * v for v in VALS for (r,c) in arrows[arrow]['list'][path] ]  ) - lpSum( [ choices[v][i][j] * v for v in VALS ] )) == 0, "arrow_" + arrow + "_" + str(path)
+            print(arrow,path)
+            prob += (lpSum( [ choices[v][r][c] * v for v in VALS for (r,c) in arrows[arrow]['list'][path] ]  ) == lpSum( [ choices[v][i][j] * v for v in VALS ] )) , "arrow_" + arrow + "_" + str(path)
 
 
 # pre-load clues with constraints , with warmstart
@@ -285,6 +265,10 @@ def magic_square(box):
     b=Boxes[box]
 
     global prob
+
+    # center box always 5
+    prob += lpSum(  [ v * choices[v][2][2] for v in VALS ]) == 5, "center_is_5" 
+
 
     # two diagonals
     prob += lpSum(  [ v * choices[v][r][c] for v in VALS for (r,c) in [ b[0], b[4], b[8] ] ]) == 15, "magic_tl2br_diag" + str(box)
@@ -421,17 +405,33 @@ if args.km_diff:
                         prob += lpSum( [ choices[v][i][j] ] + [ choices[v][r][c] ] ) <= 1 , 'kmd_v%1d_r%1d_c%1d_i%1d_j%1d'%( v, r, c, i, j)
                         km_seen[(v,i,j,r,c)]=1
 
+# A constraint ensuring that only one value can be in each square is created
+for r in ROWS:
+    for c in COLS:
+        prob += lpSum([choices[v][r][c] for v in VALS]) == 1
+
+# standard sudoku
+# The row, column and box constraints are added for each value
+for v in VALS:
+    for r in ROWS:
+        prob += lpSum([choices[v][r][c] for c in COLS]) == 1
+
+    for c in COLS:
+        prob += lpSum([choices[v][r][c] for r in ROWS]) == 1
+
+    for b in Boxes:
+        prob += lpSum([choices[v][r][c] for (r, c) in b]) == 1, "boxes_" + str(v) + str(b)
+
+
+
 # The problem data is written to an .lp file
-prob.writeLP("Sudoku.lp")
+#prob.writeLP("Sudoku.lp")
 
 # A file called sudokuout.txt is created/overwritten for writing to
 sudokuout = open('sudokuout.txt','w')
 
 # The problem data is written to an .lp file
 prob.writeLP("Sudoku.lp")
-
-# A file called sudokuout.txt is created/overwritten for writing to
-sudokuout = open('sudokuout.txt','w')
 
 solver=PULP_CBC_CMD(msg=True,warmStart=True)
 
@@ -460,7 +460,8 @@ while tries < int(TRIES):
                         if c == 9:
                             sudokuout.write("|\n")
         sudokuout.write("+-------+-------+-------+\n\n")
-        #sys.exit(33)
+        sudokuout.close()
+        sys.exit(33)
         # The constraint is added that the same solution cannot be returned again
         # stores those values that have solved this. the next run will check
         # these save cells and constrain that sum on future runs is < 81
