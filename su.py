@@ -79,12 +79,18 @@ choices = LpVariable.dicts("Choice", (VALS, ROWS, COLS), cat='Binary')
 
 cages = dict()
 arrows = dict()
+thermos = dict()
 data  = []
 #cage_pat=re.compile('^(?P<lou>[A-Z])(?P<var>\d{1,2})')
 #arrow_pat=re.compile('^(??<loua>[a-z])(?P<vara>\d{0,1})')
 
-cage_pat=re.compile('^([A-Z])(\d{1,2})')
+# cages A-S
+cage_pat=re.compile('^([A-S])(\d{1,2})')
+# arrows a-z
 arrow_pat=re.compile('^([a-z])(T|\d)')
+# thermos T1-Z8 ( 8 would mean one bulb, 8 tentacles)
+# bulb TxB -- in order Tx1 Tx2 ... Txn
+thermo_pat=re.compile('^([T-Z])(B|[1-8])([1-9])?')
 
 fh = open(args.input_file[0], "r")
 lineno=0
@@ -96,52 +102,88 @@ for line in fh.readlines():
         lineno=lineno+1
         tmp2=[]
         for x in range(9):
-            cell=tmp[x].strip()
-            #print("working on ", cell)
-            cagefind =cage_pat.match(cell)
-            arrowfind=arrow_pat.match(cell)
-            #pprint.pprint(arrowfind)
-            if cagefind is not None:
-                cage=cagefind.group(1)
-                total=cagefind.group(2)
-                if cage not in cages:
-                    cages[cage]=dict()
-                    cages[cage]['val']=total
-                    cages[cage]['list']=[]
-                if 'val' in cages[cage] and cages[cage]['val'] != total:
-                    print("ERROR, duplicate cage ", cage)
-                    sys.exit(1)
-                cages[cage]['list'].append( (lineno,x+1) )
-                tmp2.append(0)
-            elif arrowfind is not None:
-                arrow=arrowfind.group(1)
-                total=arrowfind.group(2)
-                if total == 'T':
-                    itot=0
-                else:
-                    itot=int(total)
- 
-                if arrow not in arrows:
-                    arrows[arrow]=dict()
-                    arrows[arrow]['list']=dict()
-                    if itot in range(1,10):
-                        arrows[arrow]['list'][itot]=[]
-                if total == 'T':
-                    arrows[arrow]['totalcell']=(lineno,x+1)
-                if itot in range(1,10) :
-                    #print(itot)
-                    if itot not in arrows[arrow]['list']:
-                        arrows[arrow]['list'][itot]=[]
-                    arrows[arrow]['list'][itot].append( (lineno,x+1) )
-                tmp2.append(0)
-            else:
-                tmp2.append(int(cell))
-        data.append(tmp2)
+            multicell=tmp[x].split("/")
+            for partial in multicell:
+                cell=partial.strip()
+                if cell != '0':
+                    print("working on ", cell)
+                cagefind =cage_pat.match(cell)
+                arrowfind=arrow_pat.match(cell)
+                thermofind=thermo_pat.match(cell)
+                #pprint.pprint(arrowfind)
+                if cagefind is not None:
+                    cage=cagefind.group(1)
+                    total=cagefind.group(2)
+                    if cage not in cages:
+                        cages[cage]=dict()
+                        cages[cage]['val']=total
+                        cages[cage]['list']=[]
+                    if 'val' in cages[cage] and cages[cage]['val'] != total:
+                        print("ERROR, duplicate cage ", cage)
+                        sys.exit(1)
+                    cages[cage]['list'].append( (lineno,x+1) )
+                    tmp2.append(0)
+                elif arrowfind is not None:
+                    arrow=arrowfind.group(1)
+                    total=arrowfind.group(2)
+                    if total == 'T':
+                        itot=0
+                    else:
+                        itot=int(total)
+     
+                    if arrow not in arrows:
+                        arrows[arrow]=dict()
+                        arrows[arrow]['list']=dict()
+                        if itot in range(1,10):
+                            arrows[arrow]['list'][itot]=[]
+                    if total == 'T':
+                        arrows[arrow]['totalcell']=(lineno,x+1)
+                    if itot in range(1,10) :
+                        #print(itot)
+                        if itot not in arrows[arrow]['list']:
+                            arrows[arrow]['list'][itot]=[]
+                        arrows[arrow]['list'][itot].append( (lineno,x+1) )
+                    tmp2.append(0)
 
+#working on  TB
+#T B None
+#working on  T11
+#T 1 1
+#working on  T12
+#T 1 2
+#{'T': {'bulb': (1, 2), 'list': {1: {2: (1, 4)}}}}
+
+                elif thermofind is not None:
+                    thermo=thermofind.group(1)
+                    tpath=thermofind.group(2)
+                    tseq=thermofind.group(3)
+                    print(thermo,tpath,tseq)
+                    if thermo not in thermos:
+                        thermos[thermo]=dict()
+                        thermos[thermo]['list']=dict()
+                    if tpath == 'B':
+                        thermos[thermo]['bulb']=(lineno,x+1)
+                        path=0
+                        seq=0
+                    else:
+                        path=int(tpath)
+                        seq=int(tseq)
+     
+                    if path in range(1,10):
+                        if path not in thermos[thermo]['list']:
+                            thermos[thermo]['list'][path]=dict()
+                    if seq in range(1,10) :
+                        thermos[thermo]['list'][path][seq]=(lineno,x+1)
+                    tmp2.append(0)
+                else:
+                    tmp2.append(int(cell))
+            data.append(tmp2)
+    
 fh.close()
-#pprint.pprint(data)
+pprint.pprint(data)
 #pprint.pprint(cages)
 #pprint.pprint(arrows)
+#pprint.pprint(thermos)
 #sys.exit(33)
 
 # cages dict looks like this
@@ -163,16 +205,26 @@ if bool(arrows):
             print(arrow,path)
             prob += (lpSum( [ choices[v][r][c] * v for v in VALS for (r,c) in arrows[arrow]['list'][path] ]  ) == lpSum( [ choices[v][i][j] * v for v in VALS ] )) , "arrow_" + arrow + "_" + str(path)
 
+#  {'T': {'bulb': (1, 2),
+#         'list': {1: {1: (1, 3), 2: (1, 4)}, 2: {1: (2, 2), 2: (3, 2)}}}}
+if bool(thermos):
+    for thermo in thermos: # T
+        for path in thermos[thermo]['list']: # npath 1, 2 ...
+            (i,j) = thermos[thermo]['bulb']
+            for x in sorted(thermos[thermo]['list'][path]):
+                (r,c) = thermos[thermo]['list'][path][x]
+                prob += lpSum(  [ v * choices[v][i][j] for v in VALS ] ) <= lpSum(  [ v * choices[v][r][c] for v in VALS ] ) -1 , "thermo_" + thermo + str(path) + str(x)
+                (i,j) = (r,c)
 
 # pre-load clues with constraints , with warmstart
-for r in range(9):
-    for c in range(9):
-        v = data[r][c]
-        if v != 0:
-            #print(v, r+1, c+1)
-            #prob += choices[v][r+1][c+1] == 1
-            choices[v][r+1][c+1].setInitialValue(1)
-            choices[v][r+1][c+1].fixValue()
+#for r in range(9):
+#    for c in range(9):
+#        v = data[r][c]
+#        if v != 0:
+#            #print(v, r+1, c+1)
+#            #prob += choices[v][r+1][c+1] == 1
+#            choices[v][r+1][c+1].setInitialValue(1)
+#            choices[v][r+1][c+1].fixValue()
 
 # pre-load clues with constraints , original way
 #for r in range(9):
