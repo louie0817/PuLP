@@ -58,7 +58,6 @@ prob = LpProblem("Sudoku_Problem")
 choices = LpVariable.dicts("Choice", (VALS, ROWS, COLS), cat='Binary')
 
 
-# We do not define an objective function since none is needed
 
 
 
@@ -102,6 +101,7 @@ for line in fh.readlines():
         lineno=lineno+1
         tmp2=[]
         for x in range(9):
+            tmpadded=False
             multicell=tmp[x].split("/")
             for partial in multicell:
                 cell=partial.strip()
@@ -122,7 +122,9 @@ for line in fh.readlines():
                         print("ERROR, duplicate cage ", cage)
                         sys.exit(1)
                     cages[cage]['list'].append( (lineno,x+1) )
-                    tmp2.append(0)
+                    if not tmpadded:
+                        tmp2.append(0)
+                        tmpadded=True
                 elif arrowfind is not None:
                     arrow=arrowfind.group(1)
                     total=arrowfind.group(2)
@@ -143,16 +145,9 @@ for line in fh.readlines():
                         if itot not in arrows[arrow]['list']:
                             arrows[arrow]['list'][itot]=[]
                         arrows[arrow]['list'][itot].append( (lineno,x+1) )
-                    tmp2.append(0)
-
-#working on  TB
-#T B None
-#working on  T11
-#T 1 1
-#working on  T12
-#T 1 2
-#{'T': {'bulb': (1, 2), 'list': {1: {2: (1, 4)}}}}
-
+                    if not tmpadded:
+                        tmp2.append(0)
+                        tmpadded=True
                 elif thermofind is not None:
                     thermo=thermofind.group(1)
                     tpath=thermofind.group(2)
@@ -174,16 +169,20 @@ for line in fh.readlines():
                             thermos[thermo]['list'][path]=dict()
                     if seq in range(1,10) :
                         thermos[thermo]['list'][path][seq]=(lineno,x+1)
-                    tmp2.append(0)
+                    if not tmpadded:
+                        tmp2.append(0)
+                        tmpadded=True
                 else:
-                    tmp2.append(int(cell))
-            data.append(tmp2)
+                    if not tmpadded:
+                        tmp2.append(int(cell))
+                        tmpadded=True
+        data.append(tmp2)
     
 fh.close()
 pprint.pprint(data)
-#pprint.pprint(cages)
-#pprint.pprint(arrows)
-#pprint.pprint(thermos)
+pprint.pprint(cages)
+pprint.pprint(arrows)
+pprint.pprint(thermos)
 #sys.exit(33)
 
 # cages dict looks like this
@@ -193,7 +192,8 @@ pprint.pprint(data)
 if bool(cages):
     for cage in cages:
         total=int(cages[cage]['val'])
-        prob += lpSum( [ choices[v][r][c] * v for v in VALS for (r,c) in cages[cage]['list'] ]  )  == total, "cage_" + cage
+        if total != 0:
+            prob += lpSum( [ choices[v][r][c] * v for v in VALS for (r,c) in cages[cage]['list'] ]  )  == total, "cage_" + cage
         # all cells in cages must be unique
         for v in VALS:
             prob += lpSum([choices[v][r][c] for (r, c) in cages[cage]['list']] ) <= 1, "cages_" + cage + str(v)
@@ -213,18 +213,19 @@ if bool(thermos):
             (i,j) = thermos[thermo]['bulb']
             for x in sorted(thermos[thermo]['list'][path]):
                 (r,c) = thermos[thermo]['list'][path][x]
+                print("adding constraint %d,%d < %d,%d\n" % (i,j,r,c) )
                 prob += lpSum(  [ v * choices[v][i][j] for v in VALS ] ) <= lpSum(  [ v * choices[v][r][c] for v in VALS ] ) -1 , "thermo_" + thermo + str(path) + str(x)
                 (i,j) = (r,c)
 
 # pre-load clues with constraints , with warmstart
-#for r in range(9):
-#    for c in range(9):
-#        v = data[r][c]
-#        if v != 0:
-#            #print(v, r+1, c+1)
-#            #prob += choices[v][r+1][c+1] == 1
-#            choices[v][r+1][c+1].setInitialValue(1)
-#            choices[v][r+1][c+1].fixValue()
+for r in range(9):
+    for c in range(9):
+        v = data[r][c]
+        if v != 0:
+            #print(v, r+1, c+1)
+            #prob += choices[v][r+1][c+1] == 1
+            choices[v][r+1][c+1].setInitialValue(1)
+            choices[v][r+1][c+1].fixValue()
 
 # pre-load clues with constraints , original way
 #for r in range(9):
@@ -457,6 +458,7 @@ if args.km_diff:
                         prob += lpSum( [ choices[v][i][j] ] + [ choices[v][r][c] ] ) <= 1 , 'kmd_v%1d_r%1d_c%1d_i%1d_j%1d'%( v, r, c, i, j)
                         km_seen[(v,i,j,r,c)]=1
 
+# We do not define an objective function since none is needed
 # A constraint ensuring that only one value can be in each square is created
 for r in ROWS:
     for c in COLS:
@@ -473,6 +475,7 @@ for v in VALS:
 
     for b in Boxes:
         prob += lpSum([choices[v][r][c] for (r, c) in b]) == 1, "boxes_" + str(v) + str(b)
+
 
 
 
