@@ -2,10 +2,10 @@
 # Import PuLP modeler functions
 from pulp import *
 
-import numpy as np
+#import numpy as np
 
 import sys
-import pprint
+from pprint import pprint
 
 # Create the 'prob' variable to contain the problem data
 
@@ -25,6 +25,17 @@ home=[]
 home = [0 for i in range(tcount)] 
 away=[]
 away = [0 for i in range(tcount)] 
+
+field_alloc=dict()
+
+fh = open(sys.argv[6], "r")
+week_names = [line.strip() for line in fh.readlines()]
+fh.close()
+
+week_name_ct=len(week_names)
+if weekct != week_name_ct:
+    print(f"ERROR count of week names {week_name_ct} differs from week arg {weekct}")
+    exit(1)
 
 
 FIELDS=range(fieldct)
@@ -56,7 +67,8 @@ print("tgs lower: " + str(total_game_lower))
 
 # FIELDS
 total_field_upper = total_field_lower= int(weekct/fieldct)
-total_field_upper += 1
+total_field_upper += 3
+total_field_lower += 1
 
 print("tfu upper: " + str(total_field_upper))
 print("tfu lower: " + str(total_field_lower))
@@ -109,10 +121,10 @@ for w in range(weekct):
 
 # constraints field usage per team -- elastic from total_game_split
 # ideal is plus/minus 1
-##LOU for f in range(fieldct):
-##LOU     for x in range(tcount):
-##LOU    prob += ( lpSum([weeks[w][f][x][a] for w in WEEKS for a in TEAMS_A]) + lpSum([weeks[w][f][h][x] for w in WEEKS for h in TEAMS_H]) ) >= int(sys.argv[4]), "lower_field_per_team_" + str(f) + str(x)
-##LOU         prob += ( lpSum([weeks[w][f][x][a] for w in WEEKS for a in TEAMS_A]) + lpSum([weeks[w][f][h][x] for w in WEEKS for h in TEAMS_H]) ) <= int(sys.argv[5]), "upper_field_per_team_" + str(f) + str(x)
+for f in range(fieldct):
+    for x in range(tcount):
+        #prob += ( lpSum([weeks[w][f][x][a] for w in WEEKS for a in TEAMS_A]) + lpSum([weeks[w][f][h][x] for w in WEEKS for h in TEAMS_H]) ) >= int(sys.argv[4]), "lower_field_per_team_" + str(f) + str(x)
+        prob += ( lpSum([weeks[w][f][x][a] for w in WEEKS for a in TEAMS_A]) + lpSum([weeks[w][f][h][x] for w in WEEKS for h in TEAMS_H]) ) <= int(sys.argv[5]), "upper_field_per_team_" + str(f) + str(x)
 
 # field constraints
 # field constraints
@@ -145,29 +157,51 @@ print("Status:", LpStatus[prob.status])
 #
 fieldspread=[[0 for f in range(fieldct)] for t in range(tcount)]
 
+csv = open("out.csv", "w")
 print("counts")
 for w in range(weekct):
     print()
     disp=w+1
-    print("week " + str(disp) )
+    name=week_names[w]
+    #print("week " + str(disp) )
+    print("week " + name )
     for f in range(fieldct):
         for h in range(tcount):
             for a in range(tcount):
                 if int(value(weeks[w][f][h][a])) == 1:
                     home[h]+=1
                     away[a]+=1
+                    field_alloc.setdefault(h,{})
+                    field_alloc.setdefault(a,{})
+                    field_alloc[h].setdefault(f,0)
+                    field_alloc[a].setdefault(f,0)
+                    field_alloc[h][f] += 1
+                    field_alloc[a][f] += 1
                     fieldspread[a][f] += 1
                     fieldspread[h][f] += 1
                     print(teams[a] + " at " + teams[h] + " on field " + fields[f] )
+                    tmp=fields[f].split("_",2)
+                    venue=tmp[0]
+                    tod=tmp[1]
+                    home_team=teams[h]
+                    away_team=teams[a]
+                    csv.write(f"{name},{tod},{venue},{home_team}.{away_team}\n")
 
-pprint.pprint(fieldspread)
+csv.close()
+
+#pprint(field_alloc)
+#exit(33)
+
+pprint(fieldspread)
 #sys.exit(33)
 
 print()
 print("tgs upper: " + str(total_game_upper))
 print("tgs lower: " + str(total_game_lower))
 for x in range(tcount):
-    print(str(home[x]) + " homes games for team " + teams[x]);
+    print(str(field_alloc[x]) + " field/slot allocation team " + teams[x]);
+    print(str(home[x]) + " home games for team " + teams[x]);
     print(str(away[x]) + " away games for team " + teams[x]);
     print()
 
+pprint(fieldspread)
