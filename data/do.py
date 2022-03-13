@@ -158,6 +158,7 @@ print("Status:", LpStatus[prob.status])
 fieldspread=[[0 for f in range(fieldct)] for t in range(tcount)]
 
 csv = open("out.csv", "w")
+csv.write(f"Date,Start Tme,Field,Home Team,Away Team\n")
 print("counts")
 for w in range(weekct):
     print()
@@ -185,7 +186,7 @@ for w in range(weekct):
                     tod=tmp[1]
                     home_team=teams[h]
                     away_team=teams[a]
-                    csv.write(f"{name},{tod},{venue},{home_team}.{away_team}\n")
+                    csv.write(f"{name},{tod},{venue},{home_team},{away_team}\n")
 
 csv.close()
 
