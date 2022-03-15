@@ -7,6 +7,7 @@ from pulp import *
 import sys
 from pprint import pprint
 from itertools import product
+from math import ceil
 
 # Create the 'prob' variable to contain the problem data
 
@@ -36,6 +37,7 @@ weekly2=fieldoct * timesct
 weekly3=fieldct
 if weekly1 != weekly2 or weekly2 != weekly3:
     print(f"ERROR calculated games per week differs from teams/2")
+    print(f"{weekly1} {weekly2} {weekly3}")
     exit(1)
 
 print(f"week ct {weekct}")
@@ -48,6 +50,11 @@ print(f"game ct {gamect}")
 print(f"weekly1 ct {weekly1}")
 print(f"weekly2 ct {weekly2}")
 print(f"weekly3 ct {weekly3}")
+
+
+times_per_team=ceil(weekct/(tcount-1))
+print(f"times_per_team ct {times_per_team}")
+
 
 
 
@@ -81,6 +88,7 @@ prob = LpProblem("Example_Problem")
 weeks = LpVariable.dicts("w", ( WEEKS , FIELDSO, TIMES , TEAMS_A , TEAMS_H ),lowBound=0, upBound=1, cat="Binary")
 
 total_games = tcount * weekct / 2
+print(f"total games: {total_games}")
 # correct
 if ((tcount * weekct) % 2) == 0:
     prob += lpSum([weeks[w] for w in WEEKS]) == total_games , "total games in season"
@@ -174,7 +182,7 @@ for w in range(weekct):
 #if weekct >= (tcount/2):
 for i in range(tcount):
     for j in range(tcount):
-        prob += ( lpSum([weeks[w][f][t][i][j] for w in WEEKS for f in FIELDSO for t in TIMES]) + lpSum([weeks[w][f][t][j][i] for w in WEEKS for f in FIELDSO for t in TIMES]) ) <= 1, f"perteam_{i}_{j}"
+        prob += ( lpSum([weeks[w][f][t][i][j] for w in WEEKS for f in FIELDSO for t in TIMES]) + lpSum([weeks[w][f][t][j][i] for w in WEEKS for f in FIELDSO for t in TIMES]) ) <= times_per_team, f"perteam_{i}_{j}"
         pass
 
 # field constraints
@@ -207,6 +215,7 @@ for t in range(timesct):
     for x in range(tcount):
         prob += ( lpSum([weeks[w][f][t][x][a] for w in WEEKS for f in FIELDSO for a in TEAMS_A]) + lpSum([weeks[w][f][t][h][x] for w in WEEKS for f in FIELDSO for h in TEAMS_H]) ) >= total_times_lower , f"lower_times_per_team_{t}_{x}"
         prob += ( lpSum([weeks[w][f][t][x][a] for w in WEEKS for f in FIELDSO for a in TEAMS_A]) + lpSum([weeks[w][f][t][h][x] for w in WEEKS for f in FIELDSO for h in TEAMS_H]) ) <= total_times_upper , f"upper_times_per_team_{t}_{x}"
+        pass
 
 # field constraints
 # field constraints
