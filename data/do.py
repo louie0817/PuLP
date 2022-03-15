@@ -81,17 +81,44 @@ FIELDSO=range(fieldoct)
 TIMES=range(timesct)
 WEEKS = range(weekct)
 TEAMS_A = TEAMS_H = range(tcount)
+#pprint(FIELDSO)
+#pprint(TIMES)
+#pprint(WEEKS)
+#pprint(TEAMS_A)
+#pprint(TEAMS_H)
 
 FIELDS=range(fieldct)
+pprint(FIELDS)
 
 prob = LpProblem("Example_Problem")
 weeks = LpVariable.dicts("w", ( WEEKS , FIELDSO, TIMES , TEAMS_A , TEAMS_H ),lowBound=0, upBound=1, cat="Binary")
+
+# pre-allocate by for intl
+for i in range(0,7):
+    #weeks[w][f][t][h][a].setInitialValue(1)
+    #weeks[w][f][t][h][a].fixValue()
+    # home vs team 7(bye)
+    weeks[i][3][0][i][7].setInitialValue(1)
+    weeks[i][3][0][i][7].fixValue()
+    # away vs team 7(bye)
+    weeks[i+7][3][0][7][i].setInitialValue(1)
+    weeks[i+7][3][0][7][i].fixValue()
+
+for w in range(weekct):
+    name=week_names[w]
+    for f in range(fieldoct):
+        for t in range(timesct):
+            for h in range(tcount):
+                for a in range(tcount):
+                    if value(weeks[w][f][t][h][a]) is not None and int(value(weeks[w][f][t][h][a])) == 1:
+                        print(f"game {w} {f} {t} {h} {a}")
 
 total_games = tcount * weekct / 2
 print(f"total games: {total_games}")
 # correct
 if ((tcount * weekct) % 2) == 0:
     prob += lpSum([weeks[w] for w in WEEKS]) == total_games , "total games in season"
+    pass
 else:
     print("odd number of total games calculated, remove this check once script accounts for this")
     sys.exit(1)
@@ -116,7 +143,7 @@ print()
 total_field_upper = total_field_lower = int(weekct/fieldoct)
 print(f"tfu total: {total_field_upper}")
 total_field_upper += int(sys.argv[5])
-#total_field_lower -= int(sys.argv[5])
+total_field_lower -= int(sys.argv[5])
 print("tfu upper: " + str(total_field_upper))
 print("tfu lower: " + str(total_field_lower))
 
@@ -167,12 +194,14 @@ for w in range(weekct):
 for w in range(weekct):
     for t in range(timesct):
         prob += ( lpSum([weeks[w][f][t][h] for f in FIELDSO for h in TEAMS_H ]) ) == (weekly1/timesct), f"per_week_time_{w}_{t}"
+        pass
 
 # each field x time tuple, once per week
 for w in range(weekct):
     for f in range(fieldoct):
         for t in range(timesct):
             prob += ( lpSum([weeks[w][f][t][h] for h in TEAMS_H ]) ) == 1 , f"per_week_field_and_time_tuple_{w}_{f}_{t}"
+            pass
 
 
 # teams cannot play themselves
@@ -207,8 +236,8 @@ for w in range(weekct):
 # ideal is plus/minus 1
 for f in range(fieldoct):
     for x in range(tcount):
-        prob += ( lpSum([weeks[w][f][t][x][a] for w in WEEKS for t in TIMES for a in TEAMS_A]) + lpSum([weeks[w][f][t][h][x] for w in WEEKS for t in TIMES for h in TEAMS_H]) ) >= total_field_lower, f"lower_field_per_team_{f}_{x}"
-        prob += ( lpSum([weeks[w][f][t][x][a] for w in WEEKS for t in TIMES for a in TEAMS_A]) + lpSum([weeks[w][f][t][h][x] for w in WEEKS for t in TIMES for h in TEAMS_H]) ) <= total_field_upper, f"upper_field_per_team_{f}_{x}"
+        #LOUIE prob += ( lpSum([weeks[w][f][t][x][a] for w in WEEKS for t in TIMES for a in TEAMS_A]) + lpSum([weeks[w][f][t][h][x] for w in WEEKS for t in TIMES for h in TEAMS_H]) ) >= total_field_lower, f"lower_field_per_team_{f}_{x}"
+        #LOUIE prob += ( lpSum([weeks[w][f][t][x][a] for w in WEEKS for t in TIMES for a in TEAMS_A]) + lpSum([weeks[w][f][t][h][x] for w in WEEKS for t in TIMES for h in TEAMS_H]) ) <= total_field_upper, f"upper_field_per_team_{f}_{x}"
         pass
 
 for t in range(timesct):
@@ -221,8 +250,18 @@ for t in range(timesct):
 # field constraints
 # field constraints
 
+solver=PULP_CBC_CMD(msg=True,warmStart=True)
 # The problem is solved using PuLP's choice of Solver
-ret=prob.solve()
+ret=prob.solve(solver)
+for w in range(weekct):
+    name=week_names[w]
+    for f in range(fieldoct):
+        for t in range(timesct):
+            for h in range(tcount):
+                for a in range(tcount):
+                    if value(weeks[w][f][t][h][a]) is not None and int(value(weeks[w][f][t][h][a])) == 1:
+                        #print(f"game {w} {f} {t} {h} {a}")
+                        pass
 
 print(prob.status)
 #sys.exit(33)
